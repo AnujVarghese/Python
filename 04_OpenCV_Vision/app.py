@@ -3,7 +3,9 @@ import cv2
 import numpy as np
 from PIL import Image, ImageDraw
 import streamlit as st
-from vision_processor import VisionProcessor
+from vision_processor import VisionProcessor, VisionProcessorError
+
+OpenCVError = getattr(cv2, "error", RuntimeError)
 
 st.set_page_config(
     page_title="SmartVision OpenCV Computer Vision Studio",
@@ -102,14 +104,24 @@ if img_pil is not None:
     with tab3:
         st.subheader("Facial Detection & Privacy Anonymization Blur")
         blur_val = st.slider("Blur Intensity Kernel Size", 5, 51, 25, step=2)
-        
-        face_cnt, blurred_faces = VisionProcessor.face_privacy_blur(img_np, blur_strength=blur_val)
+
+        try:
+            face_cnt, blurred_faces = VisionProcessor.face_privacy_blur(img_np, blur_strength=blur_val)
+            face_caption = f"Anonymized Output ({face_cnt} faces detected)"
+        except (VisionProcessorError, OpenCVError):
+            face_cnt = 0
+            blurred_faces = img_np.copy()
+            face_caption = "Face blur unavailable"
+            st.warning(
+                "Face blur is unavailable because OpenCV's Haar cascade data is missing "
+                "or unsupported. Reinstall with opencv-python-headless 4.x, then redeploy."
+            )
         
         col_f1, col_f2 = st.columns(2)
         with col_f1:
             st.image(img_np, caption="Original Input Image", use_container_width=True)
         with col_f2:
-            st.image(blurred_faces, caption=f"Anonymized Output ({face_cnt} faces detected)", use_container_width=True)
+            st.image(blurred_faces, caption=face_caption, use_container_width=True)
             
     with tab4:
         st.subheader("Interactive OpenCV Filter Studio")

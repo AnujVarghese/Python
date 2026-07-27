@@ -10,6 +10,14 @@ Includes:
 import cv2
 import numpy as np
 from PIL import Image
+from pathlib import Path
+
+
+FACE_CASCADE_FILE = "haarcascade_frontalface_default.xml"
+
+
+class VisionProcessorError(RuntimeError):
+    """Raised when an optional OpenCV feature is unavailable."""
 
 class VisionProcessor:
     """Core OpenCV Image Processing Utilities."""
@@ -99,8 +107,7 @@ class VisionProcessor:
     def face_privacy_blur(image_np: np.ndarray, blur_strength: int = 25):
         """Detects faces using Haar Cascade and applies privacy blur."""
         gray = cv2.cvtColor(image_np, cv2.COLOR_RGB2GRAY)
-        cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
-        face_cascade = cv2.CascadeClassifier(cascade_path)
+        face_cascade = VisionProcessor._load_face_cascade()
 
         faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
         blurred_img = image_np.copy()
@@ -113,6 +120,57 @@ class VisionProcessor:
             cv2.rectangle(blurred_img, (x, y), (x+w, y+h), (0, 255, 255), 2)
 
         return len(faces), blurred_img
+
+    @staticmethod
+    def _load_face_cascade():
+        """Load OpenCV's bundled frontal-face Haar cascade with clear errors."""
+        if not hasattr(cv2, "CascadeClassifier"):
+            raise VisionProcessorError(
+                "This OpenCV build does not include CascadeClassifier. "
+                "Install opencv-python-headless 4.x for the face privacy blur."
+            )
+
+        candidates = VisionProcessor._face_cascade_candidates()
+        for cascade_path in candidates:
+            if not cascade_path.exists():
+                continue
+
+            classifier = cv2.CascadeClassifier(str(cascade_path))
+            if not classifier.empty():
+                return classifier
+
+        searched = ", ".join(str(path) for path in candidates) or "no cascade paths"
+        raise VisionProcessorError(
+            f"OpenCV could not load {FACE_CASCADE_FILE}. "
+            "Install opencv-python-headless 4.x, then redeploy the app. "
+            f"Searched: {searched}"
+        )
+
+    @staticmethod
+    def _face_cascade_candidates():
+        """Return likely locations for the bundled OpenCV Haar cascade."""
+        candidates = []
+
+        data_module = getattr(cv2, "data", None)
+        haarcascades = getattr(data_module, "haarcascades", None)
+        if haarcascades:
+            candidates.append(Path(haarcascades) / FACE_CASCADE_FILE)
+
+        cv2_file = getattr(cv2, "__file__", None)
+        if cv2_file:
+            candidates.append(Path(cv2_file).resolve().parent / "data" / FACE_CASCADE_FILE)
+
+        candidates.append(Path(__file__).resolve().parent / "data" / FACE_CASCADE_FILE)
+
+        unique_candidates = []
+        seen = set()
+        for path in candidates:
+            path_key = str(path)
+            if path_key not in seen:
+                seen.add(path_key)
+                unique_candidates.append(path)
+
+        return unique_candidates
 
     @staticmethod
     def apply_filter(image_np: np.ndarray, filter_name: str, ksize: int = 5):
