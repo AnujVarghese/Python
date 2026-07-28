@@ -19,18 +19,15 @@ class LLMAssistant:
     def _init_local_model(self):
         try:
             print(f"Loading local LLM model: {self.model_name}...")
-            tokenizer = AutoTokenizer.from_pretrained(self.model_name)
-            model = AutoModelForSeq2SeqLM.from_pretrained(self.model_name)
-            self.generator = pipeline(
-                "text2text-generation",
-                model=model,
-                tokenizer=tokenizer,
-                max_length=512
-            )
+            self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+            self.model = AutoModelForSeq2SeqLM.from_pretrained(self.model_name)
+            self.generator = True
             print("Local LLM model loaded successfully!")
         except Exception as e:
             print(f"Failed to load HuggingFace model '{self.model_name}': {e}")
             self.generator = None
+            self.tokenizer = None
+            self.model = None
 
     def generate(self, prompt: str, max_new_tokens: int = 256, temperature: float = 0.7, api_key: str = None, provider: str = "Local HuggingFace") -> str:
         """Executes text generation using chosen provider or local fallback."""
@@ -44,15 +41,18 @@ class LLMAssistant:
             return self._call_openai_api(prompt, api_key)
 
         # Default Local Inference
-        if self.generator is not None:
+        if self.generator is not None and self.model is not None and self.tokenizer is not None:
             try:
-                res = self.generator(
-                    prompt,
-                    max_length=max_new_tokens + len(prompt.split()),
-                    do_sample=True if temperature > 0.1 else False,
-                    temperature=max(0.1, temperature)
-                )
-                return res[0]['generated_text']
+                inputs = self.tokenizer(prompt, return_tensors="pt", truncation=True, max_length=512)
+                do_sample = temperature > 0.1
+                gen_kwargs = {
+                    "max_new_tokens": max_new_tokens,
+                    "do_sample": do_sample,
+                }
+                if do_sample:
+                    gen_kwargs["temperature"] = max(0.1, temperature)
+                outputs = self.model.generate(**inputs, **gen_kwargs)
+                return self.tokenizer.decode(outputs[0], skip_special_tokens=True)
             except Exception as e:
                 return f"Local Generation Error: {e}"
         else:
