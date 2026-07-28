@@ -26,7 +26,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.markdown('<div class="llm-title">CodeIQ & DocSense: Practical LLM Assistant</div>', unsafe_allow_html=True)
-st.write("Intelligent Code Review, Refactoring, and Executive Document Summarization powered by local Transformers & optional API routing.")
+st.write("Intelligent Code Review, Refactoring, and Executive Document Summarization. Hosted on Streamlit Cloud via the HuggingFace Inference API — no heavy model download required.")
 
 @st.cache_resource
 def get_llm():
@@ -36,13 +36,31 @@ llm = get_llm()
 
 # Sidebar Configuration
 st.sidebar.title("⚙️ LLM Configuration")
-provider = st.sidebar.selectbox("Inference Backend", ["Local HuggingFace (FLAN-T5)", "Google Gemini API", "OpenAI API"])
-api_key = ""
-if provider in ["Google Gemini API", "OpenAI API"]:
-    api_key = st.sidebar.text_input(f"Enter {provider} Key", type="password")
-    
+provider = st.sidebar.selectbox(
+    "Inference Backend",
+    ["HuggingFace Inference API", "Google Gemini API", "OpenAI API", "Local HuggingFace (FLAN-T5)"],
+    help="On Streamlit Cloud, use a hosted backend. Local mode requires torch+transformers installed locally.",
+)
+
+# Resolve API key: sidebar input takes precedence, else fall back to Streamlit secrets
+secret_map = {
+    "HuggingFace Inference API": "HF_TOKEN",
+    "Google Gemini API": "GOOGLE_API_KEY",
+    "OpenAI API": "OPENAI_API_KEY",
+}
+sidebar_key = st.sidebar.text_input(
+    f"Enter {provider} Key (or set {secret_map.get(provider, 'API_KEY')} in secrets)",
+    type="password",
+    value="",
+    help="Free tokens: huggingface.co/settings/tokens · aistudio.google.com · platform.openai.com",
+)
+api_key = sidebar_key or st.secrets.get(secret_map.get(provider, ""), "")
+
+if not api_key and provider != "Local HuggingFace (FLAN-T5)":
+    st.sidebar.warning(f"No {provider} key detected. Add one in the field above or in Streamlit secrets.")
+
 temperature = st.sidebar.slider("Temperature", 0.0, 1.0, 0.4, 0.05)
-max_tokens = st.sidebar.slider("Max Tokens", 64, 512, 256, 32)
+max_tokens = st.sidebar.slider("Max Tokens", 64, 1024, 256, 32)
 
 tab1, tab2, tab3 = st.tabs(["💻 Code Audit & Refactoring", "📄 Executive Document Summarizer", "playground Prompt Playground"])
 
