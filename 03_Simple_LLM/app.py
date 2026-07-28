@@ -26,7 +26,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.markdown('<div class="llm-title">CodeIQ & DocSense: Practical LLM Assistant</div>', unsafe_allow_html=True)
-st.write("Intelligent Code Review, Refactoring, and Executive Document Summarization. Hosted on Streamlit Cloud via the HuggingFace Inference API — no heavy model download required.")
+st.write("Intelligent Code Review, Refactoring, and Executive Document Summarization. Runs fully offline on the local FLAN-T5 model — **no API key required** for the default backend.")
 
 @st.cache_resource
 def get_llm():
@@ -38,29 +38,39 @@ llm = get_llm()
 st.sidebar.title("⚙️ LLM Configuration")
 provider = st.sidebar.selectbox(
     "Inference Backend",
-    ["HuggingFace Inference API", "Google Gemini API", "OpenAI API", "Local HuggingFace (FLAN-T5)"],
-    help="On Streamlit Cloud, use a hosted backend. Local mode requires torch+transformers installed locally.",
+    [
+        "Local FLAN-T5 (no key)",
+        "HuggingFace Inference API",
+        "Google Gemini API",
+        "OpenAI API",
+    ],
+    help="Default is local FLAN-T5 — works offline, no signup. Other backends are higher-quality upgrades that need a key.",
 )
 
-# Resolve API key: sidebar input takes precedence, else fall back to Streamlit secrets
+needs_key = provider in {
+    "HuggingFace Inference API",
+    "Google Gemini API",
+    "OpenAI API",
+}
 secret_map = {
     "HuggingFace Inference API": "HF_TOKEN",
     "Google Gemini API": "GOOGLE_API_KEY",
     "OpenAI API": "OPENAI_API_KEY",
 }
-sidebar_key = st.sidebar.text_input(
-    f"Enter {provider} Key (or set {secret_map.get(provider, 'API_KEY')} in secrets)",
-    type="password",
-    value="",
-    help="Free tokens: huggingface.co/settings/tokens · aistudio.google.com · platform.openai.com",
-)
-api_key = sidebar_key or st.secrets.get(secret_map.get(provider, ""), "")
-
-if not api_key and provider != "Local HuggingFace (FLAN-T5)":
-    st.sidebar.warning(f"No {provider} key detected. Add one in the field above or in Streamlit secrets.")
+api_key = ""
+if needs_key:
+    sidebar_key = st.sidebar.text_input(
+        f"Enter {provider} key (or set {secret_map.get(provider, 'API_KEY')} in secrets)",
+        type="password",
+        value="",
+        help="Free tokens: huggingface.co/settings/tokens · aistudio.google.com · platform.openai.com",
+    )
+    api_key = sidebar_key or st.secrets.get(secret_map.get(provider, ""), "")
+    if not api_key:
+        st.sidebar.warning(f"No {provider} key detected. Stay on 'Local FLAN-T5' for keyless use.")
 
 temperature = st.sidebar.slider("Temperature", 0.0, 1.0, 0.4, 0.05)
-max_tokens = st.sidebar.slider("Max Tokens", 64, 1024, 256, 32)
+max_tokens = st.sidebar.slider("Max Tokens", 64, 512, 256, 32)
 
 tab1, tab2, tab3 = st.tabs(["💻 Code Audit & Refactoring", "📄 Executive Document Summarizer", "playground Prompt Playground"])
 
